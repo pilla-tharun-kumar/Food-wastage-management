@@ -1,0 +1,16 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+*.sqlite3
+*.sqlite3-*
+staticfiles/
+.coverage
+htmlcov/
+.pytest_cache/
+*.log
+artifacts/
+deliverables/
+AI_Powered_Food_Waste_Management_Platform_for_Surplus_Identification.docx
+node_modules/
