@@ -140,12 +140,14 @@ async function loadInventory() {
   $('#scan-filter').hidden=!state.barcode;
   $('#scan-filter-text').textContent=`Barcode / QR filter: ${state.barcode}`;
 }
-const pageDetails={overview:['Inventory overview','Monitor your stock, prioritise expiring batches and reduce food waste.'],inventory:['Inventory management','Manage every product and batch, from arrival to its last fresh day.'],alerts:['Expiry alerts','Review the batches that need action before your next service.'],categories:['Food categories','Food categories, perishability and storage guidance for your inventory.'],donations:['Donation records','Completed handovers, recipient records and quantities taken from stock.'],activity:['Activity history','Follow the stock trail with quantities, reasons and timestamps.']};
+const pageDetails={overview:['Inventory overview','Monitor your stock, prioritise expiring batches and reduce food waste.'],inventory:['Inventory management','Manage every product and batch, from arrival to its last fresh day.'],alerts:['Expiry alerts','Review the batches that need action before your next service.'],predictions:['Waste intelligence','Forecast demand, spot likely surplus and plan purchases within storage limits.'],categories:['Food categories','Food categories, perishability and storage guidance for your inventory.'],donations:['Donation records','Completed handovers, recipient records and quantities taken from stock.'],activity:['Activity history','Follow the stock trail with quantities, reasons and timestamps.']};
 async function navigate(page) {
   state.page=page; state.secondaryNumber=1;
   if (mobileLayout.matches && document.body.classList.contains('sidebar-open')) closeNavigation();
   const [title,subtitle]=pageDetails[page];
   $('#page-title').textContent=title; $('#page-subtitle').textContent=subtitle;
+  $('#page-eyebrow').textContent=page==='predictions'?'DEMAND FORECAST & WASTE RISK':'INVENTORY & EXPIRY TRACKING';
+  $('.heading-actions').hidden=page==='predictions';
   const navigationTitle = $(`.nav-item[data-page="${page}"]`).getAttribute('aria-label');
   $('#breadcrumb-page').textContent=navigationTitle;
   document.title=`${navigationTitle} · FoodBridge`;
@@ -158,11 +160,34 @@ async function navigate(page) {
   if(inventory) await loadInventory(); else await loadSecondary();
 }
 function emptyBlock(title,description) { return `<div class="empty-cell"><strong>${esc(title)}</strong><p>${esc(description)}</p></div>`; }
+function forecastBars(points) {
+  const values=points.map(point=>Number(point.quantity));
+  const max=Math.max(1,...values);
+  return `<div class="forecast-bars" role="img" aria-label="Seven-day demand forecast">${values.map((value,index)=>`<span style="height:${Math.max(9,Math.round(value/max*100))}%" title="Day ${index+1}: ${amount(value)}"></span>`).join('')}</div>`;
+}
+async function loadPredictions(requestId) {
+  const [rows,categories,coverage]=await Promise.all([api('/api/predictions/'),api('/api/predictions/categories/'),api('/api/demand/coverage/')]);
+  if(requestId!==secondaryRequest || state.page!=='predictions') return;
+  state.predictions=rows;
+  const demo=coverage.sources.find(source=>source.source==='demo')?.count || 0;
+  const high=rows.filter(row=>row.risk_level==='high').length;
+  const noPrediction=coverage.products.filter(product=>!rows.some(row=>row.product===product.product_id)).length;
+  const stats=`<div class="prediction-stats"><article><span>PRODUCT FORECASTS</span><strong>${rows.length}</strong><small>Latest completed day</small></article><article><span>HIGH WASTE RISK</span><strong>${high}</strong><small>Prioritise these products</small></article><article><span>CATEGORY MODELS</span><strong>${categories.length}</strong><small>Grouped by category and unit</small></article><article><span>HISTORY RECORDS</span><strong>${coverage.records}</strong><small>${demo?`${demo} synthetic demo rows`:'Imported business data'}</small></article></div>`;
+  const note=`<div class="prediction-note"><strong>${demo?'Demo history is synthetic.':'Forecasts use your imported history.'}</strong><span>${demo?'Replace demo rows with real sales, purchase and waste history before making purchasing decisions. ':''}A forecast is an estimate, not a guarantee. Risk uses stock, nearest expiry and projected demand. Reorder quantities require a storage capacity.</span></div>`;
+  const table=rows.length?`<div class="table-scroll prediction-table" tabindex="0" role="region" aria-label="Product demand forecasts; scroll horizontally for all columns"><table><thead><tr><th>Product</th><th>Next 7 days</th><th>Stock</th><th>Nearest expiry</th><th>Waste risk</th><th>Expected surplus</th><th>Suggested reorder</th><th>Model</th><th>Planning</th></tr></thead><tbody>${rows.map(row=>`<tr><td><strong>${esc(row.product_name)}</strong><small>${esc(row.category)} · ${esc(row.sku)}</small></td><td><strong>${amount(row.forecast_7d)} ${esc(row.unit)}</strong>${forecastBars(row.daily_forecast)}</td><td>${amount(row.stock_quantity)} ${esc(row.unit)}</td><td>${row.nearest_expiry_date?date(row.nearest_expiry_date):'—'}</td><td><span class="risk-pill ${esc(row.risk_level)}">${row.risk_score}/100 · ${esc(row.risk_level)}</span></td><td>${amount(row.expected_surplus)} ${esc(row.unit)}</td><td>${row.reorder_quantity===null?'<span class="muted">Set capacity</span>':`${amount(row.reorder_quantity)} ${esc(row.unit)}`}</td><td><span class="model-chip">${esc(row.model_name)}</span><small>${row.history_days} days of history${row.backtest_mae===null?'':` · MAE ${amount(row.backtest_mae)}`}</small></td><td><button class="secondary compact" data-plan-product="${row.product}">Set capacity</button></td></tr>`).join('')}</tbody></table></div>`:emptyBlock('No current forecasts','Import at least 21 continuous completed days of history per SKU, then run predictions.');
+  const categoryCards=categories.length?`<div class="category-forecast-grid">${categories.map(row=>`<article><span>${esc(row.category_name)} · ${esc(row.unit)}</span><strong>${amount(row.forecast_7d)}</strong><small>forecast demand next 7 days · ${esc(row.model_name)} model</small>${forecastBars(row.daily_forecast)}</article>`).join('')}</div>`:'<p class="muted prediction-empty">Category forecasts appear when each product in that category and unit has complete history.</p>';
+  $('#secondary-content').innerHTML=`${stats}${note}<div class="prediction-subheading"><div><span class="section-kicker">PRODUCT DECISIONS</span><h3>Demand, risk and reorder</h3></div><span>${noPrediction} product${noPrediction===1?'':'s'} waiting for data</span></div>${table}<div class="prediction-subheading"><div><span class="section-kicker">CATEGORY OUTLOOK</span><h3>Next week by food category</h3></div></div>${categoryCards}`;
+  $('#secondary-info').textContent=`${rows.length} current product forecasts · As of yesterday`;
+  $('#secondary-prev').disabled=$('#secondary-next').disabled=true;$('#secondary-number').textContent='1';
+}
 async function loadSecondary() {
   const requestId=++secondaryRequest, page=state.page;
-  const detail={alerts:['Batches to review','Acknowledging an alert keeps it visible until the stock is used, removed, or its expiry details change.'],categories:['Know your food','Storage guidance is a general planning aid. Follow the product label and your business food-handling policy.'],donations:['Completed donations','Each recorded donation reduces stock and creates a transaction.'],activity:['Inventory transactions','Newest changes first. History is retained even after a batch is deleted.']}[page];
+  const detail={alerts:['Batches to review','Acknowledging an alert keeps it visible until the stock is used, removed, or its expiry details change.'],predictions:['Demand forecast and waste risk','Use daily sales history to identify likely surplus. Configure each product’s capacity to receive reorder quantities.'],categories:['Know your food','Storage guidance is a general planning aid. Follow the product label and your business food-handling policy.'],donations:['Completed donations','Each recorded donation reduces stock and creates a transaction.'],activity:['Inventory transactions','Newest changes first. History is retained even after a batch is deleted.']}[page];
   if(!detail) return;
   $('#secondary-title').textContent=detail[0]; $('#secondary-description').textContent=detail[1]; $('#donate-button').hidden=page!=='donations';
+  $('#prediction-import-button').hidden=$('#prediction-run-button').hidden=page!=='predictions';
+  $('#prediction-model').hidden=page!=='predictions';
+  if(page==='predictions') {await loadPredictions(requestId);return;}
   if(page==='categories') {
     $('#secondary-content').innerHTML=`<div class="category-grid">${state.categories.map(c=>`<article class="category-card"><h3>${esc(c.name)}</h3><code>${esc(c.code)}</code><span class="badge ${esc(c.perishability)}">${esc(c.perishability)} perishability</span><p><strong>${esc(c.storage)}</strong></p><p>${esc(c.guidance)}</p></article>`).join('')}</div>`;
     $('#secondary-info').textContent=`${state.categories.length} food categories`; $('#secondary-prev').disabled=$('#secondary-next').disabled=true; $('#secondary-number').textContent='1'; return;
@@ -228,11 +253,14 @@ document.addEventListener('click',safe(async event=>{
   if(target.dataset.adjust) {const batch=await api(`/api/inventory/${target.dataset.adjust}/`);$('#adjust-form').reset();$('#adjust-form').elements.id.value=batch.id;$('#adjust-description').textContent=`${batch.product_name} · ${batch.batch_number} · Current stock: ${amount(batch.quantity)} ${batch.unit}`;modal('#adjust-dialog');}
   if(target.dataset.delete) {const batch=await api(`/api/inventory/${target.dataset.delete}/`);$('#delete-form').elements.id.value=batch.id;$('#delete-form').elements.version.value=batch.version;$('#delete-description').textContent=`${batch.product_name} · ${batch.batch_number} · ${amount(batch.quantity)} ${batch.unit}`;modal('#delete-dialog');}
   if(target.dataset.acknowledge) {target.disabled=true;try{await api(`/api/alerts/${target.dataset.acknowledge}/acknowledge/`,{method:'POST'});await refresh();toast('Alert acknowledged.');}finally{target.disabled=false;}}
+  if(target.dataset.planProduct) {const product=await api(`/api/products/${target.dataset.planProduct}/`);$('#planning-form').reset();$('#planning-form').elements.product.value=product.id;$('#planning-title').textContent=`Plan ${product.name}`;$('#planning-description').textContent=`Capacity and lead time for ${product.unit} stock.`;$('#planning-capacity').value=product.storage_capacity??'';$('#planning-lead').value=product.reorder_lead_days;modal('#planning-dialog');}
 }));
 $('#add-button').onclick=safe(()=>openBatch());
 $('#new-product-button').onclick=()=>{$('#product-form').reset();modal('#product-dialog');};
 $('#batch-product').onchange=updateUnit;
 $('#import-button').onclick=()=>{$('#import-form').reset();modal('#import-dialog');};
+$('#prediction-import-button').onclick=()=>{$('#demand-import-form').reset();modal('#demand-import-dialog');};
+$('#prediction-run-button').onclick=safe(async()=>{const button=$('#prediction-run-button'),model=$('#prediction-model');button.disabled=model.disabled=true;button.textContent='Calculating…';try{const result=await api('/api/predictions/run/',{method:'POST',body:{model:model.value}});await loadSecondary();toast(`${result.updated.length} product forecasts updated.${result.skipped.length?` ${result.skipped.length} skipped: ${result.skipped[0].reason}`:''}`);}finally{button.disabled=model.disabled=false;button.textContent='Run predictions';}});
 $('#category-filter').onchange=safe(async event=>{state.category=event.target.value;state.number=1;await loadInventory();});
 let searchTimer;
 $('#inventory-search').oninput=event=>{clearTimeout(searchTimer);state.search=event.target.value;state.number=1;searchTimer=setTimeout(safe(loadInventory),250);};
@@ -260,8 +288,10 @@ bindForm('#batch-form',async(data)=>{
   await api(id?`/api/inventory/${id}/`:'/api/inventory/',{method:id?'PATCH':'POST',body:data});
   $('#batch-dialog').close();await refresh();toast(id?'Inventory batch updated.':'Inventory batch added.');
 });
-bindForm('#product-form',async data=>{const product=await api('/api/products/',{method:'POST',body:data});await loadProducts(product.id);$('#product-dialog').close();toast('Product created. Complete the batch details to add stock.');});
+bindForm('#product-form',async data=>{data.storage_capacity=data.storage_capacity===''?null:data.storage_capacity;data.reorder_lead_days=Number(data.reorder_lead_days);const product=await api('/api/products/',{method:'POST',body:data});await loadProducts(product.id);$('#product-dialog').close();toast('Product created. Complete the batch details to add stock.');});
 bindForm('#import-form',async(_,form)=>{const data=await api('/api/inventory/import-csv/',{method:'POST',body:new FormData(form)});$('#import-dialog').close();await refresh();toast(`${data.imported} inventory batches imported.`);});
+bindForm('#demand-import-form',async(_,form)=>{const body=new FormData(form);const replace=body.get('replace')==='true';body.delete('replace');const data=await api(`/api/demand/import-csv/?replace=${replace}`,{method:'POST',body});$('#demand-import-dialog').close();await loadSecondary();toast(`${data.imported} demand records imported${data.replaced?` (${data.replaced} replaced)`:''}. Run predictions to update scores.`);});
+bindForm('#planning-form',async data=>{const product=data.product;delete data.product;data.storage_capacity=data.storage_capacity===''?null:data.storage_capacity;data.reorder_lead_days=Number(data.reorder_lead_days);await api(`/api/products/${product}/planning/`,{method:'PATCH',body:data});let forecastError=null;try{await api('/api/predictions/run/',{method:'POST',body:{product:Number(product)}});}catch(error){forecastError=error;}$('#planning-dialog').close();await loadSecondary();toast(forecastError?`Planning saved. Forecast pending: ${forecastError.message}`:'Planning settings and forecast updated.');});
 bindForm('#adjust-form',async data=>{const id=data.id;delete data.id;await api(`/api/inventory/${id}/adjust/`,{method:'POST',body:data});$('#adjust-dialog').close();await refresh();toast('Stock adjusted and recorded in activity history.');});
 bindForm('#delete-form',async data=>{await api(`/api/inventory/${data.id}/`,{method:'DELETE',body:{version:Number(data.version)}});$('#delete-dialog').close();await refresh();toast('Batch deleted. Its history has been retained.');});
 bindForm('#donation-form',async data=>{await api('/api/donations/',{method:'POST',body:data});$('#donation-dialog').close();await refresh();toast('Donation recorded and stock updated.');});

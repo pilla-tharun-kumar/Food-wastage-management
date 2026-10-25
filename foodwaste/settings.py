@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
@@ -65,4 +66,8 @@ REST_FRAMEWORK = {
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
 CELERY_TIMEZONE = TIME_ZONE
-CELERY_BEAT_SCHEDULE = {'refresh-expiry-alerts-hourly': {'task': 'inventory.tasks.refresh_expiry_alerts', 'schedule': 3600.0}}
+CELERY_BEAT_SCHEDULE = {
+    'refresh-expiry-alerts-hourly': {'task': 'inventory.tasks.refresh_expiry_alerts', 'schedule': 3600.0},
+    'refresh-demand-predictions-daily': {'task': 'inventory.tasks.refresh_demand_predictions',
+                                          'schedule': crontab(hour=2, minute=0)},
+}

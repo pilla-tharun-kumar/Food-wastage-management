@@ -1,0 +1,4 @@
+-r requirements-prediction.txt
+pandas>=2.2,<3
+prophet>=1.1,<2
+torch>=2.4,<3

@@ -1,6 +1,6 @@
-# Milestone 1 architecture
+# FoodBridge architecture — Milestones 1 and 2
 
-The first milestone delivers a working inventory system and the data foundation for later AI and redistribution modules. A single Django application serves a responsive dashboard and a REST API. The browser uses same-origin session authentication, while POS clients use tokens. SQLite keeps local setup simple; the ORM allows a later PostgreSQL migration.
+The first two milestones deliver inventory operations and demand/waste intelligence. Django serves the responsive dashboard and tenant-scoped REST API. The browser uses same-origin session authentication, while POS clients use tokens. SQLite keeps local setup simple; the ORM allows a later PostgreSQL migration. An optional FastAPI process performs prediction scoring behind Django.
 
 ```mermaid
 flowchart LR
@@ -16,6 +16,12 @@ flowchart LR
     Alerts --> DB
     DB --> API
     API --> Notifications[In-app alerts and counts]
+    DemandCSV[Daily sales / purchases / waste CSV] --> API
+    API --> Demand[(Demand observations)]
+    Demand --> Predictor[Daily batch / on-demand prediction]
+    Predictor -->|Optional private HTTP| FastAPI[FastAPI scoring service]
+    Predictor --> Snapshots[(Product and category prediction snapshots)]
+    Snapshots --> API
 ```
 
 ## Database relationships
@@ -34,6 +40,9 @@ erDiagram
     BUSINESS ||--o{ STOCK_TRANSACTION : owns
     BUSINESS ||--o{ DONATION_LOG : owns
     BUSINESS ||--o{ EXPIRY_ALERT : owns
+    PRODUCT ||--o{ DEMAND_OBSERVATION : records
+    PRODUCT ||--o{ PREDICTION_SNAPSHOT : forecasts
+    BUSINESS ||--o{ CATEGORY_PREDICTION_SNAPSHOT : forecasts
 ```
 
 Each user has one business membership. Several users can share the same business. Categories are a global read-only taxonomy. Product SKU and nonempty barcode are unique within a business; batches are unique by business, product and batch number. Business IDs are assigned from the authenticated membership, never from client-selected scope. Related product/batch fields only accept objects belonging to that business.
@@ -48,7 +57,11 @@ CSV imports run in one transaction: a later invalid row rolls back earlier produ
 
 Dates are interpreted in the configured business deployment time zone (`Asia/Kolkata` by default). A batch threshold overrides the workspace default. The status sequence is zero stock → expired → within threshold → fresh. A persistent alert exists per batch; repeated checks update it instead of generating duplicates. Acknowledgement is separate from resolution. Expiry or severity changes and reopening risk clear acknowledgement.
 
-The default Windows launcher runs a periodic expiry watcher alongside Django. Celery Beat and Redis provide an alternative scheduler. The dashboard also refreshes current alerts during reads and polls while visible. Notifications are in-app, with no external delivery provider required.
+The default Windows launcher runs expiry and daily prediction watchers alongside Django. Celery Beat and Redis provide an alternative scheduler. The dashboard also refreshes current alerts during reads and polls while visible. Notifications are in-app, with no external delivery provider required.
+
+## Prediction behavior
+
+Daily observations are scoped to the authenticated business and SKU. A product series needs consecutive completed days ending yesterday; missing dates are not treated as zero. Category histories only use dates present for every product sharing a category and stock unit. Django passes history, current stock, closest expiry and planning settings to either its in-process scoring library or the configured FastAPI service. The service does not query or store tenant data. A seven-day forecast feeds a transparent waste-risk and capacity-aware reorder rule. Snapshots store model identity, backtest error and the inputs needed to explain a result. Synthetic demo rows are explicitly labeled and should not be used to claim production accuracy.
 
 ## Implementation boundaries
 
@@ -58,8 +71,8 @@ The default Windows launcher runs a periodic expiry watcher alongside Django. Ce
 - SQLite serializes writes. Conditional updates reject stale clients, but large concurrent workloads require a production database and load testing.
 - Codes identify existing products; no third-party barcode database or commercial POS adapter is included.
 - The stock ledger retains operational history; it is not a tamper-proof compliance ledger against trusted database administrators.
-- AI forecasting, risk scoring, NGO matching, reservations, pickup scheduling and impact estimates are outside Weeks 1–2.
+- NGO matching, reservations, pickup scheduling and impact estimates remain outside Weeks 1–4.
 
 ## Decision on frontend stack
 
-The supplied brief explicitly introduces React dashboards in Weeks 5–6. The first milestone uses Django templates and vanilla JavaScript to keep setup small and demonstrate the REST integration now. Later React clients can use the same tenant-scoped API rather than reimplementing inventory rules.
+The supplied brief explicitly introduces React dashboards in Weeks 5–6. The current milestones use Django templates and vanilla JavaScript to keep setup small and demonstrate the REST integration now. Later React clients can use the same tenant-scoped API rather than reimplementing inventory rules.

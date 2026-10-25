@@ -1,0 +1,8 @@
+product_name,sku,barcode,category,unit,batch_number,quantity,received_date,expiry_date,storage_location,alert_days,notes
+Tomatoes,TOM-001,,vegetables,kg,TOM-001-A,12.5,2026-10-25,2026-10-30,Produce shelf,3,Synthetic inventory sample
+Baby spinach,SPN-001,,vegetables,kg,SPN-001-A,6.25,2026-10-25,2026-10-29,Walk-in chiller,2,Synthetic inventory sample
+Red apples,APL-001,,fruit,kg,APL-001-A,25,2026-10-25,2026-11-05,Produce shelf,4,Synthetic inventory sample
+Fresh whole milk,MLK-001,,dairy,litre,MLK-001-A,24,2026-10-25,2026-10-31,Walk-in chiller,2,Synthetic inventory sample
+Sourdough loaves,BRD-001,,bakery,unit,BRD-001-A,10,2026-10-25,2026-10-29,Bakery rack,2,Synthetic inventory sample
+Frozen green peas,PEA-001,,frozen,kg,PEA-001-A,20,2026-10-25,2027-01-25,Freezer,7,Synthetic inventory sample
+Basmati rice,RIC-001,,grains,kg,RIC-001-A,50,2026-10-25,2027-04-25,Dry store,14,Synthetic inventory sample

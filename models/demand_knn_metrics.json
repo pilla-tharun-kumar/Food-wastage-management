@@ -1,0 +1,23 @@
+{
+  "source": "https://huggingface.co/datasets/Dingdong-Inc/FreshRetailNet-50K",
+  "revision": "08c1fab7f9257bc73679d415d65d644165d351d4",
+  "license": "CC-BY-4.0",
+  "attribution": "Dingdong-Inc, FreshRetailNet-50K, Wang et al. (2025), arXiv:2505.16319",
+  "source_sha256": "6706832db892bbae4969c19d87e07975d2543d2ba7d7d4756360654785de5a3d",
+  "model": "KNeighborsRegressor",
+  "neighbors": 15,
+  "series": 400,
+  "windows": {
+    "train": 1065,
+    "validation": 308,
+    "test": 272
+  },
+  "train_end": "2024-05-28",
+  "validation_end": "2024-06-11",
+  "validation_mae": 0.3404268298612822,
+  "test_mae": 0.4438859058910215,
+  "seasonal_test_mae": 0.5030777310924369,
+  "test_wape": 0.3576891967752673,
+  "units": "Source-normalized sales; local inference rescales relative patterns using the last 28-day mean.",
+  "limitations": "Historical sample, not a live feed. No purchase/waste labels. Targets with stockouts excluded. Transfer to local product units requires validation."
+}

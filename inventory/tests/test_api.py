@@ -1,5 +1,7 @@
 import csv
 import io
+from pathlib import Path
+from django.conf import settings
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -51,6 +53,14 @@ class InventoryAPITests(APITestCase):
                                self.today.isoformat(),(self.today+timedelta(days=3)).isoformat(),'Shelf A','','']))
         row.update(overrides)
         return [row[field] for field in HEADERS]
+
+    def test_delivered_inventory_sample_imports_into_empty_workspace(self):
+        source = Path(settings.BASE_DIR) / 'examples' / 'synthetic_inventory_products.csv'
+        upload = SimpleUploadedFile(source.name, source.read_bytes(), content_type='text/csv')
+        response = self.client.post('/api/inventory/import-csv/', {'file': upload}, format='multipart')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['imported'], 7)
+        self.assertTrue(Product.objects.filter(business=self.business, sku='TOM-001').exists())
 
     def test_anonymous_and_unassigned_accounts_are_denied(self):
         self.client.force_authenticate(None)

@@ -1,0 +1,12 @@
+{
+  "actual_next_7_days": [
+    1.2,
+    0.9999999999999999,
+    1.1,
+    0.37,
+    0.49999999999999994,
+    0.8,
+    0.8
+  ],
+  "note": "Held-out real sales; stock/capacity are illustrative, purchases/waste are placeholders and not model features."
+}

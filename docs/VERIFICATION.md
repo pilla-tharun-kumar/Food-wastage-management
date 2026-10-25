@@ -1,5 +1,33 @@
 # Milestone 1 verification
 
+## Signup and saved KNN — 25 October 2026
+
+- Application suite: **42 tests passed**, including signup, password mismatch/duplicate rejection, private workspace creation, automatic login and CSRF protection.
+- Service and saved-model suites: **5 tests passed**, including saved inference without fitting, unit rescaling and short-history rejection.
+- Public FreshRetailNet training sample: 400 selected store/product series; 1,065 training windows, 308 validation windows and 272 held-out test windows. KNN selected k=15. Held-out MAE 0.4439 versus previous-week baseline 0.5031; WAPE 35.77%, all in source-normalized sales units. These figures do not establish accuracy on the local demo business.
+- Saved model sample executed successfully; local KNN batch updated all nine demo products with zero skips.
+- The signup browser preview could not be completed: automatic browser approval review hit the account usage limit. Form rendering/behavior is covered by Django tests, but visual QA for the new signup page remains pending.
+
+## Milestone 2 verification — 25 October 2026
+
+The Week 3–4 implementation was exercised with 567 deterministic synthetic daily records across nine local demo products. The records are marked `demo`, and the interface explicitly states that forecast accuracy is not yet validated on real business data. A batch run generated nine product snapshots and seven category/unit snapshots. The FastAPI health route returned OK; its protected scoring route rejected a missing service token and accepted the matching token. A Django batch run also succeeded through the configured FastAPI service. The Waste intelligence page was inspected in both Marketplace and official themes with the populated demo data. CSV rollback, duplicate replacement, tenant scope, complete category-day grouping, missing history, capacity limits and risk behavior are covered by the inventory test suite.
+
+The standalone service and optional model dependency bundle are separate from `requirements.txt`; a basic local install can run the seasonal forecast in-process. A live Redis/Celery deployment and production data calibration remain outside this local verification.
+
+| Check | Result |
+|---|---|
+| `python manage.py test inventory` | **39 tests passed** |
+| `python manage.py check` | No issues |
+| `python manage.py makemigrations --check --dry-run` | No changes detected |
+| `node --check static/app.js` | JavaScript syntax passed |
+| PowerShell parser check of `start.ps1` | No parse errors |
+| `git diff --check` | No whitespace errors |
+| `python -m unittest prediction_service.test_app` | **3 tests passed**: token protection, per-item batch failures, immediate scoring and capacity limits |
+| Explicit LSTM fit on 63 synthetic days | Successful seven-day forecast |
+| `manage.py run_predictions --business-id 1 --model lstm` | Nine product forecasts updated, zero skipped |
+| Optional Prophet fit | Verification stalled locally and was stopped; not certified as working in this Windows environment |
+| `python -m pip check` | No broken requirements |
+
 Verified locally on **14 October 2026** using Python 3.12.14, Django 5.2.18, Django REST Framework 3.17.2 and SQLite.
 
 ## Automated checks

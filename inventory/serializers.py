@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Business, Category, DonationLog, ExpiryAlert, InventoryBatch, Product, StockTransaction
+from .models import (Business, Category, CategoryPredictionSnapshot, DemandObservation, DonationLog, ExpiryAlert,
+                     InventoryBatch, PredictionSnapshot, Product, StockTransaction)
 
 
 class BusinessSerializer(serializers.ModelSerializer):
@@ -22,7 +23,8 @@ class ProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ['id', 'name', 'sku', 'barcode', 'category', 'category_name', 'unit', 'storage', 'perishability']
+        fields = ['id', 'name', 'sku', 'barcode', 'category', 'category_name', 'unit', 'storage',
+                  'perishability', 'storage_capacity', 'reorder_lead_days']
         validators = []
 
     def validate(self, attrs):
@@ -31,6 +33,50 @@ class ProductSerializer(serializers.ModelSerializer):
             if attrs.get(field) and Product.objects.filter(business=business, **{field: attrs[field]}).exists():
                 raise serializers.ValidationError({field: f'A product with this {field} already exists.'})
         return attrs
+
+
+class ProductPlanningSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ['storage_capacity', 'reorder_lead_days']
+
+
+class DemandObservationSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    sku = serializers.CharField(source='product.sku', read_only=True)
+    unit = serializers.CharField(source='product.unit', read_only=True)
+    category = serializers.CharField(source='product.category.name', read_only=True)
+
+    class Meta:
+        model = DemandObservation
+        fields = ['id', 'product', 'product_name', 'sku', 'unit', 'category', 'date',
+                  'sales_quantity', 'purchase_quantity', 'waste_quantity', 'source']
+
+
+class PredictionSnapshotSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    sku = serializers.CharField(source='product.sku', read_only=True)
+    unit = serializers.CharField(source='product.unit', read_only=True)
+    category = serializers.CharField(source='product.category.name', read_only=True)
+    storage_capacity = serializers.DecimalField(source='product.storage_capacity', max_digits=12, decimal_places=3, read_only=True)
+    reorder_lead_days = serializers.IntegerField(source='product.reorder_lead_days', read_only=True)
+
+    class Meta:
+        model = PredictionSnapshot
+        fields = ['id', 'product', 'product_name', 'sku', 'unit', 'category', 'as_of_date',
+                  'model_name', 'history_days', 'backtest_mae', 'daily_forecast', 'forecast_7d',
+                  'stock_quantity', 'nearest_expiry_date', 'risk_score', 'risk_level',
+                  'expected_surplus', 'reorder_quantity', 'storage_capacity',
+                  'reorder_lead_days', 'generated_at']
+
+
+class CategoryPredictionSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+
+    class Meta:
+        model = CategoryPredictionSnapshot
+        fields = ['id', 'category', 'category_name', 'unit', 'as_of_date', 'model_name',
+                  'history_days', 'backtest_mae', 'daily_forecast', 'forecast_7d', 'generated_at']
 
 
 class BatchSerializer(serializers.ModelSerializer):

@@ -1,6 +1,6 @@
-# FoodBridge — Milestone 1
+# FoodBridge — Milestones 1 and 2
 
-Inventory Management & Expiry Tracking for the **AI-Powered Food Waste Management Platform for Surplus Identification and Redistribution Optimization**. This repository implements the supplied project brief's **Weeks 1–2** using Django, Django REST Framework, SQLite and a responsive web dashboard.
+Inventory Management, Expiry Tracking and Demand Forecasting for the **AI-Powered Food Waste Management Platform for Surplus Identification and Redistribution Optimization**. This repository implements the supplied project brief's **Weeks 1–4** using Django, Django REST Framework, a FastAPI prediction service, SQLite and a responsive web dashboard.
 
 ## Navigation and dashboard
 
@@ -18,20 +18,24 @@ FoodBridge offers two palettes: Food Rescue Marketplace (deep navy, teal and war
 - Per-business and per-batch expiry thresholds, persisted in-app alerts, acknowledgement, and automatic refresh.
 - Stock transaction history and completed donation logs that reduce stock and survive deletion of a batch.
 - A local expiry watcher, plus Celery/Redis configuration for scheduled operation.
+- Daily sales, purchase and waste history import; product and category demand forecasts; surplus risk and capacity-aware reorder suggestions.
+- A FastAPI scoring service with on-demand and scheduled batch predictions. Seasonal forecasting runs with core dependencies; Prophet and LSTM are available through the optional model bundle.
 - Automated tests, demo data, API documentation and a milestone/demo checklist.
 
-The Week 3–4 AI forecasting service and Week 5–6 matching marketplace, pickup scheduling and React dashboards are future modules. There are no external AI API dependencies in this milestone.
+The Week 5–6 matching marketplace, pickup scheduling and React dashboards are future modules. There are no external AI API dependencies.
 
 ## Quick start on Windows
 
 Use **Python 3.12**. Run these commands from the project folder in PowerShell. The default SQLite database needs no separate database service.
 
 ```powershell
-py -3.12 -m venv .venv
+ -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item .env.example .env
-.\.venv\Scripts\python.exe manage.py migrate
+.\.venv\Scripts\python.exe manage.py migrapyte
 .\.venv\Scripts\python.exe manage.py seed_demo
+.\.venv\Scripts\python.exe manage.py seed_demand_demo
+.\.venv\Scripts\python.exe manage.py run_predictions
 ```
 
 The demo command prints a **randomly generated password** for username `demo`. Save it locally. Running it again does not reset data or credentials. If needed, reset the local demo password interactively:
@@ -40,13 +44,13 @@ The demo command prints a **randomly generated password** for username `demo`. S
 .\.venv\Scripts\python.exe manage.py changepassword demo
 ```
 
-Start the dashboard and the expiry watcher together:
+Start the dashboard, expiry watcher and daily prediction watcher together:
 
 ```powershell
 .\start.ps1
 ```
 
-Open **http://127.0.0.1:8000/** and sign in. Keep the terminal running. The watcher checks expiry every 60 seconds, even if the browser is closed. Ctrl+C stops the server and watcher. To use another port: `.\start.ps1 -Port 8001`.
+Open **http://127.0.0.1:8000/** and sign in. Open **Waste intelligence** in the sidebar. Keep the terminal running. The watchers check expiry every 60 seconds and predictions daily, even if the browser is closed. Ctrl+C stops the server and watchers. To use another port: `.\start.ps1 -Port 8001`.
 
 If PowerShell blocks script execution, there is no need to change the machine policy. Run the following in two terminals instead:
 
@@ -55,13 +59,17 @@ If PowerShell blocks script execution, there is no need to change the machine po
 .\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
 # Terminal 2
 .\.venv\Scripts\python.exe manage.py check_expiry --watch --interval 60
+# Terminal 3
+.\.venv\Scripts\python.exe manage.py run_predictions --watch --interval 86400
 ```
 
-On macOS/Linux, create a virtual environment with `python3.12 -m venv .venv`, then use `.venv/bin/python` in place of `.\.venv\Scripts\python.exe`. Start the server and watcher in two terminals as above.
+On macOS/Linux, create a virtual environment with `python3.12 -m venv .venv`, then use `.venv/bin/python` in place of `.\.venv\Scripts\python.exe`. Start the server and watchers in separate terminals as above.
 
 If `py` is missing, install Python 3.12 or use the full path to an existing Python 3.12 executable. Virtual environments are machine-specific and should never be copied between computers or committed to Git.
 
 ## Real business accounts
+
+Use **Create an account** on the sign-in page, or visit `/signup/`. Registration validates the password, creates a new private business workspace, and signs the user in. The form asks for username, email, workspace name and password confirmation. New accounts begin with empty inventory; they do not inherit demo records. Email verification and account recovery are not included.
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py create_business --name "My Kitchen" --username kitchen
@@ -103,7 +111,39 @@ celery -A foodwaste worker --loglevel=info --pool=solo
 celery -A foodwaste beat --loglevel=info
 ```
 
-Beat queues an expiry refresh every hour. `--pool=solo` is suitable for a Windows development demo; use Linux workers for deployment. Broker-backed delivery needs an actual running Redis, worker and Beat. Task logic is covered by the test suite; the local watcher is the default runnable path.
+Beat queues an expiry refresh every hour and a prediction refresh daily at 02:00. `--pool=solo` is suitable for a Windows development demo; use Linux workers for deployment. Broker-backed delivery needs an actual running Redis, worker and Beat. Task logic is covered by the test suite; the local watchers are the default runnable path.
+
+## Milestone 2: demand and waste intelligence
+
+### Saved KNN model trained on public retail data
+
+The repository includes a trained KNN artifact at `models/demand_knn.joblib`. Install `requirements-knn.txt`, then choose **KNN · saved model** in Waste intelligence (the dashboard default). It loads the saved model without retraining. The model learned relative sales patterns from a deterministic sample of real historical FreshRetailNet-50K data on Hugging Face, under CC BY 4.0. See [model provenance, training and limitations](docs/KNN_MODEL.md).
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-knn.txt
+.\.venv\Scripts\python.exe -m forecasting.test_sample
+```
+
+The bundled JSON sample contains held-out real sales history, with illustrative stock/expiry settings. The command prints seven predictions, risk/reorder output and sample error against actual subsequent sales. Retrain with `python -m forecasting.train_knn`; batch-score local inventory with `python manage.py run_predictions --model knn`. Scheduled runs retain the seasonal default unless `--model knn` is selected in the watcher command.
+
+The demo generator creates 63 deterministic days of **synthetic** sales, purchases and waste for seeded products. Its rows are labeled `demo` in data coverage; they are not real business observations and do not establish production forecast accuracy. To replace them with real history, import a CSV in **Waste intelligence → Import demand history**. The required header is:
+
+```csv
+date,sku,sales_quantity,purchase_quantity,waste_quantity
+2026-10-24,TOM-001,4.000,6.000,0.500
+```
+
+Use each product's stock unit, a row for every completed date (including zeros), and an existing business SKU. At least 21 consecutive days ending yesterday are needed. Uploads are atomic, limited to 5,000 rows/2 MB, and can explicitly replace matching SKU/date rows. Set capacity and supplier lead days in a product's planning form to enable safe reorder quantities. Without a capacity, the API returns no reorder quantity.
+
+The default in-process seasonal model requires no extra service. To run the separate FastAPI service, install `requirements-prediction.txt` and start it in another terminal:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-prediction.txt
+$env:PREDICTION_SERVICE_TOKEN='choose-a-local-secret'
+.\.venv\Scripts\python.exe -m uvicorn prediction_service.app:app --host 127.0.0.1 --port 8100
+```
+
+Set `PREDICTION_SERVICE_URL=http://127.0.0.1:8100` and the same `PREDICTION_SERVICE_TOKEN` in Django's `.env`, then restart Django. The service exposes `/health` and authenticated `POST /v1/analyze`; the browser never calls it directly. Install `requirements-models.txt` on the prediction host for optional Prophet and PyTorch LSTM. Scheduled runs use the quick seasonal model by default; the dashboard selects saved KNN. For a comparison run, use `manage.py run_predictions --model auto` or send `{"model":"auto"}` to the run API; auto compares the seasonal and available LSTM models by backtest error. Prophet is explicitly selectable, but its local Windows verification stalled and remains unverified. Explicitly requested unavailable models return an error. Advanced models need more history and take longer to train. Production work still needs real data, forecast calibration, operational monitoring and a production database.
 
 ## Checks
 
@@ -113,9 +153,11 @@ Beat queues an expiry refresh every hour. `--pool=solo` is suitable for a Window
 .\.venv\Scripts\python.exe manage.py test inventory
 ```
 
-See [API reference](docs/API.md), [architecture](docs/ARCHITECTURE.md), [milestone checklist and demo](docs/MILESTONE_1.md), and [verification results](docs/VERIFICATION.md). CI runs checks automatically after you manually push the repository to GitHub.
+See [API reference](docs/API.md), [architecture](docs/ARCHITECTURE.md), [Milestone 1](docs/MILESTONE_1.md), [Milestone 2 walkthrough](docs/MILESTONE_2.md), and [verification results](docs/VERIFICATION.md). CI runs checks automatically after you manually push the repository to GitHub.
 
 ![FoodBridge dashboard with sample inventory](docs/screenshots/dashboard.png)
+
+![Waste intelligence with synthetic demo forecasts](docs/screenshots/waste-intelligence.png)
 
 ## Project structure
 
@@ -123,12 +165,14 @@ See [API reference](docs/API.md), [architecture](docs/ARCHITECTURE.md), [milesto
 foodwaste/                  Django settings, URLs, WSGI and Celery
 inventory/                  Models, serializers, permissions, API views and services
 inventory/migrations/       Schema and food-taxonomy seed data
-inventory/management/       Business provisioning, demo seed and expiry watcher
+inventory/management/       Provisioning, demo seeds and local schedulers
 inventory/tests/            API, validation, tenant and workflow tests
+forecasting/                Model fitting, validation, risk and reorder scoring
+prediction_service/         FastAPI on-demand scoring service
 templates/                  Sign-in and responsive dashboard
 static/                     CSS, JavaScript and bundled scanner
 docs/                       API, architecture, milestone checklist and demo
-start.ps1                   Local server plus expiry watcher
+start.ps1                   Local server plus expiry and prediction watchers
 ```
 
 ## Manual GitHub handoff

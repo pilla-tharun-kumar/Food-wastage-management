@@ -2,10 +2,11 @@ import csv
 import io
 from datetime import timedelta
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import login
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Q
+from django.db.models import Count, F, Max, Min, Q
 from django.http import HttpResponse
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import mixins, status, viewsets
@@ -13,10 +14,32 @@ from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from .csv_import import HEADERS, import_inventory
-from .models import Category, DonationLog, ExpiryAlert, InventoryBatch, Product, StockTransaction
+from .models import (Category, CategoryPredictionSnapshot, DemandObservation, DonationLog, ExpiryAlert, InventoryBatch,
+                     PredictionSnapshot, Product, StockTransaction)
+from .prediction import (HEADERS as DEMAND_HEADERS, category_history, import_history,
+                         predict_product, run_predictions)
+from forecasting.core import ForecastError
 from .serializers import (AdjustmentSerializer, AlertSerializer, BatchSerializer, BusinessSerializer,
-                          CategorySerializer, DonationSerializer, ProductSerializer, TransactionSerializer)
+                          CategoryPredictionSerializer, CategorySerializer, DemandObservationSerializer, DonationSerializer,
+                          PredictionSnapshotSerializer, ProductPlanningSerializer, ProductSerializer,
+                          TransactionSerializer)
 from .services import adjust_batch, create_batch, delete_batch, donate, refresh_alerts, update_batch
+from .forms import SignupForm
+from .models import Business, Membership
+
+
+def signup(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+    form = SignupForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        with transaction.atomic():
+            user = form.save()
+            business = Business.objects.create(name=form.cleaned_data['business_name'])
+            Membership.objects.create(user=user, business=business)
+        login(request, user)
+        return redirect('dashboard')
+    return render(request, 'signup.html', {'form': form})
 
 
 @login_required
@@ -51,6 +74,109 @@ class ProductViewSet(IntegrityResponseMixin, mixins.CreateModelMixin, viewsets.R
 
     def perform_create(self, serializer):
         serializer.save(business=self.business)
+
+    @action(detail=True, methods=['patch'])
+    def planning(self, request, pk=None):
+        product = self.get_object()
+        serializer = ProductPlanningSerializer(product, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(ProductSerializer(product, context={'request': request}).data)
+
+
+class DemandViewSet(IntegrityResponseMixin, viewsets.ReadOnlyModelViewSet):
+    serializer_class = DemandObservationSerializer
+
+    def get_queryset(self):
+        queryset = DemandObservation.objects.filter(business=self.business).select_related('product__category')
+        product = self.request.query_params.get('product')
+        if product:
+            try:
+                product_id = int(product)
+                if product_id < 1:
+                    raise ValueError
+            except ValueError:
+                raise ValidationError({'product': 'Use a positive product ID.'})
+            queryset = queryset.filter(product_id=product_id)
+        return queryset
+
+    @action(detail=False, methods=['post'], url_path='import-csv')
+    def import_csv(self, request):
+        upload = request.FILES.get('file')
+        if upload is None:
+            raise ValidationError({'file': 'Attach a CSV using multipart form field "file".'})
+        replace = request.query_params.get('replace', 'false').lower()
+        if replace not in ('true', 'false'):
+            raise ValidationError({'replace': 'Use true or false.'})
+        return Response(import_history(upload, self.business, replace == 'true'), status=201)
+
+    @action(detail=False, methods=['get'], url_path='csv-template')
+    def csv_template(self, request):
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="demand-history-template.csv"'
+        writer = csv.writer(response)
+        writer.writerow(DEMAND_HEADERS)
+        writer.writerow([(timezone.localdate() - timedelta(days=1)).isoformat(), 'YOUR-SKU', '2.000', '3.000', '0.000'])
+        return response
+
+    @action(detail=False, methods=['get'], url_path='category-series')
+    def category_series(self, request):
+        category = Category.objects.filter(code=request.query_params.get('category')).first()
+        unit = request.query_params.get('unit')
+        if category is None or unit not in dict(Product._meta.get_field('unit').choices):
+            raise ValidationError({'detail': 'Choose a valid category code and stock unit.'})
+        data = category_history(self.business, category, unit, timezone.localdate() - timedelta(days=1))
+        return Response({'category': category.code, 'unit': unit, 'complete_days': len(data), 'daily': data})
+
+    @action(detail=False, methods=['get'])
+    def coverage(self, request):
+        records = DemandObservation.objects.filter(business=self.business)
+        return Response({
+            'records': records.count(),
+            'sources': list(records.values('source').annotate(count=Count('id')).order_by('source')),
+            'products': list(records.values('product_id', 'product__name', 'product__category__name', 'product__unit')
+                             .annotate(days=Count('id'), first=Min('date'), last=Max('date')).order_by('product__name')),
+        })
+
+
+class PredictionViewSet(IntegrityResponseMixin, viewsets.ReadOnlyModelViewSet):
+    serializer_class = PredictionSnapshotSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        queryset = PredictionSnapshot.objects.filter(business=self.business).select_related('product__category')
+        if self.action == 'list':
+            queryset = queryset.filter(as_of_date=timezone.localdate() - timedelta(days=1))
+        return queryset
+
+    @action(detail=False, methods=['post'])
+    def run(self, request):
+        model = request.data.get('model', 'seasonal')
+        if model not in ('auto', 'seasonal', 'prophet', 'lstm', 'knn'):
+            raise ValidationError({'model': 'Use auto, seasonal, prophet, lstm or knn.'})
+        product_id = request.data.get('product')
+        if product_id:
+            try:
+                product_id = int(product_id)
+                if product_id < 1:
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise ValidationError({'product': 'Use a positive product ID.'})
+            product = Product.objects.filter(business=self.business, pk=product_id).select_related('business').first()
+            if product is None:
+                raise ValidationError({'product': 'Choose a product belonging to your business.'})
+            try:
+                snapshot = predict_product(product, model=model)
+            except ForecastError as exc:
+                raise ValidationError({'product': str(exc)}) from exc
+            return Response(self.get_serializer(snapshot).data)
+        return Response(run_predictions(self.business, model=model))
+
+    @action(detail=False, methods=['get'])
+    def categories(self, request):
+        queryset = CategoryPredictionSnapshot.objects.filter(
+            business=self.business, as_of_date=timezone.localdate() - timedelta(days=1)).select_related('category')
+        return Response(CategoryPredictionSerializer(queryset, many=True).data)
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
