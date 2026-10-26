@@ -22,6 +22,6 @@ Outputs: `models/demand_knn.joblib`, `models/demand_knn_metrics.json`, and a hel
 .\.venv\Scripts\python.exe manage.py run_predictions --model knn
 ```
 
-Choose **Waste intelligence → KNN · saved model → Run predictions**, or POST the sample JSON to FastAPI `/v1/analyze` with the configured service token. KNN needs 28 continuous completed history days. The model is loaded from disk and cached, rather than fitted on each request. Its relative outputs are rescaled by each local product's recent mean to retain that product's units. This transfer requires validation on actual local history before purchasing decisions.
+Choose **Smart intelligence → KNN · saved model → Run predictions**, or POST the sample JSON to FastAPI `/v1/analyze` with the configured service token. KNN needs 28 continuous completed history days. The model is loaded from disk and cached, rather than fitted on each request. Its relative outputs are rescaled by each local product's recent mean to retain that product's units. This transfer requires validation on actual local history before purchasing decisions.
 
 `examples/knn_sample.json` contains real held-out sales history. Stock, capacity and expiry are illustrative inputs for testing the risk/reorder engine; purchase/waste zeros are placeholders, not real measurements or KNN features. `knn_sample_expected.json` contains the following seven actual sales values. Waste risk remains an expiry/stock/forecast calculation, not a learned waste classifier.

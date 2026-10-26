@@ -1,6 +1,6 @@
 # FoodBridge architecture — Milestones 1 and 2
 
-The first two milestones deliver inventory operations and demand/waste intelligence. Django serves the responsive dashboard and tenant-scoped REST API. The browser uses same-origin session authentication, while POS clients use tokens. SQLite keeps local setup simple; the ORM allows a later PostgreSQL migration. An optional FastAPI process performs prediction scoring behind Django.
+The first two milestones deliver inventory operations and demand/Smart intelligence. Django serves the responsive dashboard and tenant-scoped REST API. The browser uses same-origin session authentication, while POS clients use tokens. SQLite keeps local setup simple; the ORM allows a later PostgreSQL migration. An optional FastAPI process performs prediction scoring behind Django.
 
 ```mermaid
 flowchart LR

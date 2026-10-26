@@ -1,7 +1,6 @@
 import csv
 import io
 from datetime import timedelta
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login
 from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Max, Min, Q
@@ -42,12 +41,20 @@ def signup(request):
     return render(request, 'signup.html', {'form': form})
 
 
-@login_required
 @ensure_csrf_cookie
 def dashboard(request):
+    if not request.user.is_authenticated:
+        return redirect('login')
+    if hasattr(request.user, 'ngo_profile'):
+        return redirect('ngo_dashboard')
     if not hasattr(request.user, 'membership'):
         return render(request, 'no_business.html', status=403)
     return render(request, 'dashboard.html', {'business': request.user.membership.business})
+
+
+@ensure_csrf_cookie
+def landing(request):
+    return render(request, 'landing.html')
 
 
 class IntegrityResponseMixin:

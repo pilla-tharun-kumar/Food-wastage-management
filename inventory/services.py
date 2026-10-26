@@ -3,7 +3,8 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import APIException, ValidationError
-from .models import Business, DonationLog, ExpiryAlert, InventoryBatch, StockTransaction
+from .models import Business, DonationLog, ExpiryAlert, InventoryBatch, StockTransaction, SurplusOffer
+from .notifications import business_users, notify
 
 
 class Conflict(APIException):
@@ -27,15 +28,29 @@ def record(batch, actor, kind, delta, note='', reference=''):
 
 def sync_batch_alert(batch):
     state = batch.status
+    if batch.days_to_expiry <= batch.effective_alert_days:
+        ngo_severity = 'expired' if batch.days_to_expiry < 0 else 'expiring'
+        ngo_ids = SurplusOffer.objects.filter(batch=batch, status__in=['requested', 'accepted', 'picked_up'],
+                                              accepted_by__isnull=False).values_list('accepted_by__user_id', flat=True)
+        notify(ngo_ids, kind='expiry', key=f'expiry:{batch.pk}:{batch.expiry_date}:{ngo_severity}',
+               title='Requested food has expired' if ngo_severity == 'expired' else 'Requested food nearing expiry',
+               message=f'{batch.product.name} from {batch.business.name} expires {batch.expiry_date:%d %b %Y}. Coordinate pickup promptly.',
+               target_url='/ngo/requests/')
     if state not in ('expiring', 'expired'):
         ExpiryAlert.objects.filter(batch=batch, resolved_at__isnull=True).update(resolved_at=timezone.now())
         return
     alert, created = ExpiryAlert.objects.get_or_create(
         batch=batch, defaults={'business': batch.business, 'severity': state, 'expiry_date': batch.expiry_date})
-    if not created and (alert.severity != state or alert.expiry_date != batch.expiry_date or alert.resolved_at):
+    changed = not created and (alert.severity != state or alert.expiry_date != batch.expiry_date or alert.resolved_at)
+    if changed:
         alert.severity, alert.expiry_date = state, batch.expiry_date
         alert.read_at = alert.resolved_at = None
         alert.save()
+    notify(business_users(batch.business), kind='expiry',
+           key=f'expiry:{batch.pk}:{batch.expiry_date}:{state}',
+           title='Expired food' if state == 'expired' else 'Food nearing expiry',
+           message=f'{batch.product.name} · batch {batch.batch_number} · expires {batch.expiry_date:%d %b %Y}.',
+           target_url='/app/?section=alerts')
 
 
 def refresh_alerts(business=None):

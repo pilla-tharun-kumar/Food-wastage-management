@@ -17,22 +17,25 @@ FoodBridge offers two palettes: Food Rescue Marketplace (deep navy, teal and war
 - Barcode/QR scanning from a camera or image, plus USB-scanner/typed-code lookup, using a locally bundled scanner library.
 - Per-business and per-batch expiry thresholds, persisted in-app alerts, acknowledgement, and automatic refresh.
 - Stock transaction history and completed donation logs that reduce stock and survive deletion of a batch.
+- Public `/` landing page, navigation on business and NGO sign-in/registration, business workspace at `/app/`, and a separate NGO workspace.
+- Business surplus offers linked to stock batches. NGOs request available food, businesses accept or decline, and NGOs confirm pickup and delivery. A request reserves stock; a declined request releases it; delivery creates the donation record.
+- Private notification pages and navbar badges for food availability, donation requests, acceptance, pickup, delivery and relevant expiry warnings. Notifications are in-app and can be marked read.
 - A local expiry watcher, plus Celery/Redis configuration for scheduled operation.
 - Daily sales, purchase and waste history import; product and category demand forecasts; surplus risk and capacity-aware reorder suggestions.
 - A FastAPI scoring service with on-demand and scheduled batch predictions. Seasonal forecasting runs with core dependencies; Prophet and LSTM are available through the optional model bundle.
 - Automated tests, demo data, API documentation and a milestone/demo checklist.
 
-The Week 5–6 matching marketplace, pickup scheduling and React dashboards are future modules. There are no external AI API dependencies.
+The surplus exchange is a working local workflow. Location-based matching, delivery logistics and NGO verification are future enhancements. There are no external AI API dependencies.
 
 ## Quick start on Windows
 
 Use **Python 3.12**. Run these commands from the project folder in PowerShell. The default SQLite database needs no separate database service.
 
 ```powershell
- -3.12 -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item .env.example .env
-.\.venv\Scripts\python.exe manage.py migrapyte
+.\.venv\Scripts\python.exe manage.py migrate
 .\.venv\Scripts\python.exe manage.py seed_demo
 .\.venv\Scripts\python.exe manage.py seed_demand_demo
 .\.venv\Scripts\python.exe manage.py run_predictions
@@ -50,7 +53,9 @@ Start the dashboard, expiry watcher and daily prediction watcher together:
 .\start.ps1
 ```
 
-Open **http://127.0.0.1:8000/** and sign in. Open **Waste intelligence** in the sidebar. Keep the terminal running. The watchers check expiry every 60 seconds and predictions daily, even if the browser is closed. Ctrl+C stops the server and watchers. To use another port: `.\start.ps1 -Port 8001`.
+Open **http://127.0.0.1:8000/** to see the public landing page, then choose business or NGO registration/sign-in. Business users can open **Smart intelligence** in the sidebar. Keep the terminal running. The watchers check expiry every 60 seconds and predictions daily, even if the browser is closed. Ctrl+C stops the server and watchers. To use another port: `.\start.ps1 -Port 8001`.
+
+To demonstrate the NGO flow: sign in as a business, select **Surplus offers**, and publish an unexpired batch quantity. Create a separate NGO account from the landing page, sign in at `/login/ngo/`, and request the food. The business accepts the request; the NGO then confirms pickup and delivery. Requesting reserves the quantity from business inventory, and delivery creates the donation log. Open the bell in either workspace to review notifications. This demo marketplace lists participating businesses without geographic filtering or partner verification.
 
 If PowerShell blocks script execution, there is no need to change the machine policy. Run the following in two terminals instead:
 
@@ -113,11 +118,11 @@ celery -A foodwaste beat --loglevel=info
 
 Beat queues an expiry refresh every hour and a prediction refresh daily at 02:00. `--pool=solo` is suitable for a Windows development demo; use Linux workers for deployment. Broker-backed delivery needs an actual running Redis, worker and Beat. Task logic is covered by the test suite; the local watchers are the default runnable path.
 
-## Milestone 2: demand and waste intelligence
+## Milestone 2: demand and Smart intelligence
 
 ### Saved KNN model trained on public retail data
 
-The repository includes a trained KNN artifact at `models/demand_knn.joblib`. Install `requirements-knn.txt`, then choose **KNN · saved model** in Waste intelligence (the dashboard default). It loads the saved model without retraining. The model learned relative sales patterns from a deterministic sample of real historical FreshRetailNet-50K data on Hugging Face, under CC BY 4.0. See [model provenance, training and limitations](docs/KNN_MODEL.md).
+The repository includes a trained KNN artifact at `models/demand_knn.joblib`. Install `requirements-knn.txt`, then choose **KNN · saved model** in Smart intelligence (the dashboard default). It loads the saved model without retraining. The model learned relative sales patterns from a deterministic sample of real historical FreshRetailNet-50K data on Hugging Face, under CC BY 4.0. See [model provenance, training and limitations](docs/KNN_MODEL.md).
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-knn.txt
@@ -126,7 +131,7 @@ The repository includes a trained KNN artifact at `models/demand_knn.joblib`. In
 
 The bundled JSON sample contains held-out real sales history, with illustrative stock/expiry settings. The command prints seven predictions, risk/reorder output and sample error against actual subsequent sales. Retrain with `python -m forecasting.train_knn`; batch-score local inventory with `python manage.py run_predictions --model knn`. Scheduled runs retain the seasonal default unless `--model knn` is selected in the watcher command.
 
-The demo generator creates 63 deterministic days of **synthetic** sales, purchases and waste for seeded products. Its rows are labeled `demo` in data coverage; they are not real business observations and do not establish production forecast accuracy. To replace them with real history, import a CSV in **Waste intelligence → Import demand history**. The required header is:
+The demo generator creates 63 deterministic days of **synthetic** sales, purchases and waste for seeded products. Its rows are labeled `demo` in data coverage; they are not real business observations and do not establish production forecast accuracy. To replace them with real history, import a CSV in **Smart intelligence → Import demand history**. The required header is:
 
 ```csv
 date,sku,sales_quantity,purchase_quantity,waste_quantity
@@ -157,7 +162,7 @@ See [API reference](docs/API.md), [architecture](docs/ARCHITECTURE.md), [Milesto
 
 ![FoodBridge dashboard with sample inventory](docs/screenshots/dashboard.png)
 
-![Waste intelligence with synthetic demo forecasts](docs/screenshots/waste-intelligence.png)
+![Smart intelligence with synthetic demo forecasts](docs/screenshots/waste-intelligence.png)
 
 ## Project structure
 

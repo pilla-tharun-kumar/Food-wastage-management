@@ -140,7 +140,7 @@ async function loadInventory() {
   $('#scan-filter').hidden=!state.barcode;
   $('#scan-filter-text').textContent=`Barcode / QR filter: ${state.barcode}`;
 }
-const pageDetails={overview:['Inventory overview','Monitor your stock, prioritise expiring batches and reduce food waste.'],inventory:['Inventory management','Manage every product and batch, from arrival to its last fresh day.'],alerts:['Expiry alerts','Review the batches that need action before your next service.'],predictions:['Waste intelligence','Forecast demand, spot likely surplus and plan purchases within storage limits.'],categories:['Food categories','Food categories, perishability and storage guidance for your inventory.'],donations:['Donation records','Completed handovers, recipient records and quantities taken from stock.'],activity:['Activity history','Follow the stock trail with quantities, reasons and timestamps.']};
+const pageDetails={overview:['Inventory overview','Monitor your stock, prioritise expiring batches and reduce food waste.'],inventory:['Inventory management','Manage every product and batch, from arrival to its last fresh day.'],alerts:['Expiry alerts','Review the batches that need action before your next service.'],predictions:['Smart intelligence','Forecast demand, spot likely surplus and plan purchases within storage limits.'],categories:['Food categories','Food categories, perishability and storage guidance for your inventory.'],donations:['Donation records','Completed handovers, recipient records and quantities taken from stock.'],activity:['Activity history','Follow the stock trail with quantities, reasons and timestamps.']};
 async function navigate(page) {
   state.page=page; state.secondaryNumber=1;
   if (mobileLayout.matches && document.body.classList.contains('sidebar-open')) closeNavigation();
@@ -302,6 +302,8 @@ safe(async()=>{
   $('#category-filter').innerHTML='<option value="">All categories</option>'+state.categories.map(c=>`<option value="${esc(c.code)}">${esc(c.name)}</option>`).join('');
   setOptions($('#product-category'),state.categories,c=>`${c.name} · ${c.perishability} perishability`,'Choose a category');
   await loadSummary();await loadInventory();
+  const requestedSection=new URLSearchParams(window.location.search).get('section');
+  if(requestedSection && pageDetails[requestedSection] && requestedSection!=='overview') await navigate(requestedSection);
 })();
 // Refresh time-sensitive alerts while the dashboard is open; scheduler handles closed sessions.
 setInterval(()=>{if(!document.hidden && !$('dialog[open]')) safe(async()=>{await loadSummary();if(state.page==='alerts')await loadSecondary();else if(['overview','inventory'].includes(state.page))await loadInventory();})();},60000);

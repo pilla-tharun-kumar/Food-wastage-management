@@ -1,0 +1,8 @@
+product_name,sku,barcode,category,unit,batch_number,quantity,received_date,expiry_date,storage_location,alert_days,notes
+Demo leaf lettuce,DEMO-LET-101,,vegetables,kg,DEMO-LET-101-A,22,2026-10-26,2026-10-29,Produce chiller,4,Synthetic demo stock
+Demo ripe bananas,DEMO-BAN-102,,fruit,kg,DEMO-BAN-102-A,28,2026-10-26,2026-10-30,Fruit shelf,4,Synthetic demo stock
+Demo plain yogurt,DEMO-YOG-103,,dairy,unit,DEMO-YOG-103-A,40,2026-10-26,2026-11-01,Dairy chiller,5,Synthetic demo stock
+Demo chicken breast,DEMO-CHK-104,,meat-seafood,kg,DEMO-CHK-104-A,17,2026-10-26,2026-10-28,Meat chiller,3,Synthetic demo stock
+Demo sourdough loaf,DEMO-BRD-105,,bakery,unit,DEMO-BRD-105-A,24,2026-10-26,2026-10-29,Bakery shelf,3,Synthetic demo stock
+Demo basmati rice,DEMO-RIC-106,,grains,kg,DEMO-RIC-106-A,65,2026-10-26,2027-04-26,Dry store,14,Synthetic demo stock
+Demo frozen peas,DEMO-PEA-107,,frozen,kg,DEMO-PEA-107-A,35,2026-10-26,2027-01-26,Freezer,7,Synthetic demo stock

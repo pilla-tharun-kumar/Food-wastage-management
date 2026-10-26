@@ -23,7 +23,7 @@ def import_inventory(upload, request):
     try:
         headers = reader.fieldnames or []
         if {'date', 'sku', 'sales_quantity', 'purchase_quantity', 'waste_quantity'}.issubset(headers):
-            raise ValidationError({'file': 'This is a demand-history CSV. Open Waste intelligence → Import demand CSV to upload it. Inventory import requires product and stock-batch details.'})
+            raise ValidationError({'file': 'This is a demand-history CSV. Open Smart intelligence → Import demand CSV to upload it. Inventory import requires product and stock-batch details.'})
         if len(headers) != len(set(headers)) or not REQUIRED.issubset(headers) or set(headers) - set(HEADERS):
             raise ValidationError({'file': f'Use the template headers. Required: {", ".join(sorted(REQUIRED))}.'})
         rows = []

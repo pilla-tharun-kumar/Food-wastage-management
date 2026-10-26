@@ -10,7 +10,7 @@ class SignupTests(TestCase):
 
     def test_signup_creates_private_workspace_and_signs_in(self):
         response = self.client.post('/signup/', self.payload())
-        self.assertRedirects(response, '/')
+        self.assertRedirects(response, '/app/')
         user = get_user_model().objects.get(username='newmember')
         self.assertTrue(user.check_password(self.payload()['password1']))
         self.assertEqual(user.membership.business.name, 'New Kitchen')

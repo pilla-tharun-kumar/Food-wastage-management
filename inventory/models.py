@@ -19,6 +19,16 @@ class Membership(models.Model):
     business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name='members')
 
 
+class NGOProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='ngo_profile')
+    organization_name = models.CharField(max_length=160)
+    service_area = models.CharField(max_length=160)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.organization_name
+
+
 class Category(models.Model):
     """Shared, read-only food taxonomy. Inventory and product records remain tenant-owned."""
     name = models.CharField(max_length=80, unique=True)
@@ -103,7 +113,7 @@ class StockTransaction(models.Model):
     business = models.ForeignKey(Business, on_delete=models.CASCADE)
     batch = models.ForeignKey(InventoryBatch, on_delete=models.SET_NULL, null=True)
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
-    kind = models.CharField(max_length=16, choices=[(s, s) for s in ['created', 'updated', 'adjusted', 'deleted', 'donated', 'imported']])
+    kind = models.CharField(max_length=16, choices=[(s, s) for s in ['created', 'updated', 'adjusted', 'deleted', 'donated', 'allocated', 'imported']])
     delta = models.DecimalField(max_digits=12, decimal_places=3)
     quantity_after = models.DecimalField(max_digits=12, decimal_places=3)
     snapshot = models.JSONField()
@@ -142,6 +152,48 @@ class DonationLog(models.Model):
 
     class Meta:
         ordering = ['-created_at', '-id']
+
+
+class SurplusOffer(models.Model):
+    STATUS_CHOICES = [('open', 'Available'), ('requested', 'Requested'), ('accepted', 'Accepted'),
+                      ('picked_up', 'Picked up'), ('delivered', 'Delivered'), ('cancelled', 'Cancelled')]
+    business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name='surplus_offers')
+    batch = models.ForeignKey(InventoryBatch, on_delete=models.PROTECT, related_name='surplus_offers')
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, validators=[MinValueValidator(Decimal('0.001'))])
+    pickup_notes = models.CharField(max_length=250, blank=True)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='open')
+    accepted_by = models.ForeignKey(NGOProfile, on_delete=models.PROTECT, null=True, blank=True, related_name='accepted_offers')
+    requested_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    picked_up_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+    @property
+    def available(self):
+        return self.status == 'open' and self.batch.quantity >= self.quantity and self.batch.days_to_expiry >= 0
+
+
+class Notification(models.Model):
+    KINDS = [('expiry', 'Expiry'), ('available', 'Food available'), ('request', 'Donation request'),
+             ('accepted', 'Accepted'), ('pickup', 'Picked up'), ('delivered', 'Delivered'),
+             ('cancelled', 'Cancelled')]
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='food_notifications')
+    kind = models.CharField(max_length=16, choices=KINDS)
+    title = models.CharField(max_length=160)
+    message = models.CharField(max_length=500)
+    target_url = models.CharField(max_length=250)
+    dedupe_key = models.CharField(max_length=120)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        constraints = [models.UniqueConstraint(fields=['recipient', 'dedupe_key'], name='unique_recipient_notification')]
 
 
 class DemandObservation(models.Model):

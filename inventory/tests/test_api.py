@@ -299,7 +299,7 @@ class InventoryAPITests(APITestCase):
 
     def test_login_dashboard_logout(self):
         client=APIClient()
-        self.assertEqual(client.get('/').status_code,302)
+        self.assertContains(client.get('/'),'Good food should go')
         self.assertEqual(client.get('/login/').status_code,200)
         self.assertTrue(client.login(username='member',password='Testing-password-283!'))
         self.assertContains(client.get('/'),'FoodBridge')
