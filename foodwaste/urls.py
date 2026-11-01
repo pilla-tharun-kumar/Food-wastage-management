@@ -4,6 +4,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from inventory import views
 from inventory import ngo_views
+from inventory import admin_views
 
 router = DefaultRouter()
 router.register('inventory', views.InventoryViewSet, basename='inventory')
@@ -22,6 +23,10 @@ urlpatterns = [
     path('login/ngo/', ngo_views.RoleLoginView.as_view(role='ngo'), name='ngo_login'),
     path('signup/', views.signup, name='signup'),
     path('signup/ngo/', ngo_views.ngo_signup, name='ngo_signup'),
+    path('superadmin/login/', admin_views.SuperAdminLoginView.as_view(), name='superadmin_login'),
+    path('superadmin/', admin_views.dashboard, name='superadmin_dashboard'),
+    path('superadmin/business/<int:pk>/delete/', admin_views.delete_business, name='superadmin_delete_business'),
+    path('superadmin/ngo/<int:pk>/delete/', admin_views.delete_ngo, name='superadmin_delete_ngo'),
     path('surplus/', ngo_views.business_surplus, name='business_surplus'),
     path('surplus/<int:pk>/cancel/', ngo_views.cancel_offer, name='cancel_surplus_offer'),
     path('surplus/<int:pk>/approve/', ngo_views.approve_request, name='approve_surplus_request'),
